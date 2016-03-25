@@ -7,8 +7,10 @@ import org.apache.spark.rdd._
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream._
 
+
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.mapreduce.Job
 
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord
@@ -16,7 +18,11 @@ import org.apache.avro.mapred.AvroKey
 import org.apache.avro.mapreduce.AvroKeyInputFormat
 import org.apache.avro.mapreduce.AvroKeyOutputFormat
 import org.apache.avro.mapreduce.AvroJob
-import org.apache.hadoop.mapreduce.Job
+
+import org.apache.log4j.Logger;
+
+import java.text.SimpleDateFormat
+import java.util.Calendar
 
 //https://github.com/massie/adam/blob/master/adam-commands/src/main/scala/edu/berkeley/cs/amplab/adam/serialization/AdamKryoRegistrator.scala
 //
@@ -29,10 +35,12 @@ import org.apache.hadoop.mapreduce.Job
 
 //TODO: This writes a single file to disk, but the path is /gt_event/part-r-00000.avro, this is because it is writing a Hadoop File and using the Avro MR libs
 //  the next area to explore is write Object, can this be done to just serialize an RDD.
-//TODO: Add the ability to read schema from HDFS
+//TODO: Add the ability to read schema from HDF
 
 object AvroIO {
-
+  
+  val logger = Logger.getLogger(this.getClass.getName)
+  
   private def createStreamingContext = {
     val conf = new SparkConf()
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -78,18 +86,20 @@ object AvroIO {
   }
 
   def readAvroStream(ssc: StreamingContext) = {
-    val inputDirectory = "hdfs://bi-mgmt02.corp.bigfishgames.com:8020/user/kalah.brown/spark_stream_test/watch"
-    ssc.fileStream[AvroKey[GenericRecord], NullWritable, AvroKeyInputFormat[GenericRecord]](inputDirectory)
+    val inputDirectory = "hdfs://bi-mgmt02.corp.bigfishgames.com:8020/user/kalah.brown/spark_stream_test/watch/"
+    ssc.fileStream[AvroKey[GenericRecord], NullWritable, AvroKeyInputFormat[GenericRecord]](inputDirectory + currentDate)
   }
 
   def writeAvroHadoopFile(avroRdd: RDD[(AvroKey[GenericRecord], NullWritable)]) = {
     avroRdd.reduceByKey((key, value) => key)
-      .saveAsNewAPIHadoopFile("/user/kalah.brown/spark_stream_test/final/gt_event"
-                              ,classOf[AvroKey[GenericRecord]]
-                              ,classOf[NullWritable]
-                              ,classOf[AvroKeyOutputFormat[GenericRecord]]
-                              ,createAvroJob.getConfiguration)
+      .saveAsNewAPIHadoopFile("/user/kalah.brown/spark_stream_test/final/gt_event", classOf[AvroKey[GenericRecord]], classOf[NullWritable], classOf[AvroKeyOutputFormat[GenericRecord]], createAvroJob.getConfiguration)
 
+  }
+
+  def currentDate = {
+    val today = Calendar.getInstance.getTime
+    val dateFormat = new SimpleDateFormat("yyyy-MM-dd")
+    dateFormat.format(today)
   }
 
   def main(args: Array[String]) {
