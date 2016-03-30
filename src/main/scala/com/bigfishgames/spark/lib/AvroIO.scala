@@ -35,7 +35,7 @@ import java.util.Calendar
 
 //TODO: This writes a single file to disk, but the path is /gt_event/part-r-00000.avro, this is because it is writing a Hadoop File and using the Avro MR libs
 //  the next area to explore is write Object, can this be done to just serialize an RDD.
-//TODO: Add the ability to read schema from HDF
+//TODO: Add the ability to read schema from HDFS
 
 object AvroIO {
   
@@ -51,6 +51,7 @@ object AvroIO {
     new StreamingContext(conf, Seconds(10))
   }
 
+  //TODO: read schema from hdfs
   private def parseAvroSchema = {
     val schemaStr = """{                              
               "type": "record",                                            
@@ -86,20 +87,21 @@ object AvroIO {
   }
 
   def readAvroStream(ssc: StreamingContext) = {
-    val inputDirectory = "hdfs://bi-mgmt02.corp.bigfishgames.com:8020/user/kalah.brown/spark_stream_test/watch/"
-    ssc.fileStream[AvroKey[GenericRecord], NullWritable, AvroKeyInputFormat[GenericRecord]](inputDirectory + currentDate)
+    val inputDirectory = "hdfs://bi-mgmt02.dev.bigfishgames.com:8020/bfg/flume-gt-events/gt-writer01.int.bigfishgames.com/valid/test.int10/"
+    ssc.fileStream[AvroKey[GenericRecord], NullWritable, AvroKeyInputFormat[GenericRecord]](inputDirectory + stagingWithCurrentDate)
   }
 
+  //TODO: update to write an Object using avro serialization straight without hadoop MR 
   def writeAvroHadoopFile(avroRdd: RDD[(AvroKey[GenericRecord], NullWritable)]) = {
     avroRdd.reduceByKey((key, value) => key)
-      .saveAsNewAPIHadoopFile("/user/kalah.brown/spark_stream_test/final/gt_event", classOf[AvroKey[GenericRecord]], classOf[NullWritable], classOf[AvroKeyOutputFormat[GenericRecord]], createAvroJob.getConfiguration)
+      .saveAsNewAPIHadoopFile("/bfg/flume-gt-events/gt-writer01.int.bigfishgames.com/valid/test.int10" + stagingWithCurrentDate, classOf[AvroKey[GenericRecord]], classOf[NullWritable], classOf[AvroKeyOutputFormat[GenericRecord]], createAvroJob.getConfiguration)
 
   }
 
-  def currentDate = {
+  def stagingWithCurrentDate = {
     val today = Calendar.getInstance.getTime
     val dateFormat = new SimpleDateFormat("yyyy-MM-dd")
-    dateFormat.format(today)
+    dateFormat.format(today) + "/staging/"
   }
 
   def main(args: Array[String]) {
