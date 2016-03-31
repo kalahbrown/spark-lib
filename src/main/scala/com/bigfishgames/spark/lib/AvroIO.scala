@@ -87,21 +87,23 @@ object AvroIO {
   }
 
   def readAvroStream(ssc: StreamingContext) = {
-    val inputDirectory = "hdfs://bi-mgmt02.dev.bigfishgames.com:8020/bfg/flume-gt-events/gt-writer01.int.bigfishgames.com/valid/test.int10/"
-    ssc.fileStream[AvroKey[GenericRecord], NullWritable, AvroKeyInputFormat[GenericRecord]](inputDirectory + stagingWithCurrentDate)
+    val inputDirectory = "hdfs://bi-mgmt02.dev.bigfishgames.com:8020/bfg/flume-gt-events/gt-writer01.int.bigfishgames.com/valid/prod/test.int10/"
+    ssc.fileStream[AvroKey[GenericRecord], NullWritable, AvroKeyInputFormat[GenericRecord]](inputDirectory + currentDate + "/staging/")
   }
 
   //TODO: update to write an Object using avro serialization straight without hadoop MR 
-  def writeAvroHadoopFile(avroRdd: RDD[(AvroKey[GenericRecord], NullWritable)]) = {
+  def dedupAvroHadoopOutputstream(avroRdd: RDD[(AvroKey[GenericRecord], NullWritable)]) = {
+    val finalRestingPlace = "hdfs://bi-mgmt02.dev.bigfishgames.com:8020/bfg/flume-gt-events/gt-writer01.int.bigfishgames.com/valid/prod/test.int10/" + currentDate
+    logger.info("WRITING DATA TO " + finalRestingPlace)
     avroRdd.reduceByKey((key, value) => key)
-      .saveAsNewAPIHadoopFile("/bfg/flume-gt-events/gt-writer01.int.bigfishgames.com/valid/test.int10" + stagingWithCurrentDate, classOf[AvroKey[GenericRecord]], classOf[NullWritable], classOf[AvroKeyOutputFormat[GenericRecord]], createAvroJob.getConfiguration)
+      .saveAsNewAPIHadoopFile(finalRestingPlace, classOf[AvroKey[GenericRecord]], classOf[NullWritable], classOf[AvroKeyOutputFormat[GenericRecord]], createAvroJob.getConfiguration)
 
   }
 
-  def stagingWithCurrentDate = {
+  def currentDate = {
     val today = Calendar.getInstance.getTime
     val dateFormat = new SimpleDateFormat("yyyy-MM-dd")
-    dateFormat.format(today) + "/staging/"
+    dateFormat.format(today)
   }
 
   def main(args: Array[String]) {
@@ -110,8 +112,10 @@ object AvroIO {
     val avroStream = readAvroStream(ssc)
 
     avroStream.foreachRDD(rdd => {
+      logger.info("RDD should I write???" + rdd.toString())
       if (!rdd.partitions.isEmpty)
-        writeAvroHadoopFile(rdd)
+        logger.info("Here I go I'm writing this rdd" + rdd.toString())
+        dedupAvroHadoopOutputstream(rdd)
     })
 
     ssc.start()
